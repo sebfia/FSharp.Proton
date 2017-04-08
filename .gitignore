@@ -5,7 +5,11 @@
 [Oo]bj/
 [Bb]in/
 packages/
+deploy/
+docs/
+temp/
 TestResults/
+.fake/
 
 # globs
 Makefile.in
@@ -27,6 +31,8 @@ autom4te.cache/
 tarballs/
 test-results/
 Thumbs.db
+paket.exe
+Paket.*.targets
 
 # Mac bundle stuff
 *.dmg
