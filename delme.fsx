@@ -21,21 +21,6 @@ ms.Seek(0L, SeekOrigin.Begin)
 reader.Dispose()
 ms.Dispose()
 
-[<AttributeUsage(AttributeTargets.Class)>]
-type TypeMapAttribute(identifier: int) =
-    inherit Attribute()
-    member val Identifier = identifier
-
-[<TypeMap(1)>]
-type Action =
-    | Release
-    | Hold
-    | Cancel of string
-
-let att = Attribute.GetCustomAttribute(typeof<Action>, typeof<TypeMapAttribute>)
-
-att :?> TypeMapAttribute |> fun a -> a.Identifier |> int16
-
 open Microsoft.FSharp.Reflection
 
 let opt = Some 3
@@ -50,9 +35,12 @@ uci.DeclaringType.GetGenericArguments() |> Array.mapi (fun i x -> printfn "%d %A
 let [|fNone;fSome;|] = FSharpType.GetUnionCases t |> Array.map FSharpValue.PreComputeUnionConstructor
 fSome [|4|] :?> Option<int>
 
+open System
+open System.IO
 open Proton
 open Proton.Operators
 
+[<TypeMap(12)>]
 type Something =
     {
         Some: int
@@ -73,6 +61,10 @@ let buf = Proto.serialize { Some = 3; Thing = Some "Arsch" }
 printfn "%A" buf
 let orig = Proto.deserialize<Something> buf
 
+let ms = new MemoryStream()
+{ Some = 3; Thing = Some "Arsch" } |> Message.append ms
+ms.Seek(0L, SeekOrigin.Begin)
+let x = Message.getAll<Something> ms |> Seq.toArray
 type Damnit = 
     {
         Ass : int
@@ -98,3 +90,11 @@ ProtoBuf.ProtoWriter.WriteType(t,w)
 ms.Length
 ms.Dispose()
 w.Close()
+
+open ProtoBuf.Meta
+let tm = TypeModel.Create()
+tm.Compile()
+tm.SerializeWithLengthPrefix(ms, optBuf, typeof<byte array>, PrefixStyle.Base128, 12)
+ms.Length
+optBuf.Length
+ms.ToArray()

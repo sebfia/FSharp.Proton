@@ -5,6 +5,10 @@ module Proton
     open ProtoBuf
     open FSharp.Reflection
 
+    [<AttributeUsage(AttributeTargets.Class)>]
+    type TypeMapAttribute(identifier: int) =
+        inherit Attribute()
+        member val Identifier = identifier
     type Proto = 
         | Reader of ProtoReader
         | Writer of ProtoWriter
@@ -329,3 +333,67 @@ module Proton
                             | (Error e),_ -> (Error e),proto
                     | (Error e),_ -> (Error e),proto
                 | (Error e),_ -> (Error e),proto
+    [<RequireQualifiedAccess>]
+    module Message =
+        open ProtoBuf.Meta
+        let inline private createTypeModel () =
+            let typeModel = TypeModel.Create()
+            typeModel.CompileInPlace()
+            typeModel
+        let private serializeToMessage =
+            let mutable typeMap = Map.empty<string,int>
+            let tryGetTypeId (t: Type) =
+                match t.GetTypeInfo() |> fun ti -> ti.GetCustomAttribute(typeof<TypeMapAttribute>) with
+                | null -> None
+                | (att: Attribute) -> att :?> TypeMapAttribute |> fun a ->  Some a.Identifier
+            fun a ->
+                let t = a.GetType()
+                let tn = t |> fun t -> t.FullName
+                match Map.tryFind tn typeMap with
+                | Some i ->
+                    (i,a |> Proto.serialize) |> Some
+                | _ ->
+                    match tryGetTypeId t with
+                    | None -> None
+                    | Some i ->
+                        (i,a |> Proto.serialize) |> Some
+        let private serializeMessage =
+            let serializer = createTypeModel()
+            fun (stream: Stream) (i,buf: byte array) ->
+                try
+                    serializer.SerializeWithLengthPrefix(stream, buf, typeof<byte array>, PrefixStyle.Base128, i)
+                with
+                | ex -> 
+                    printfn "%A" ex
+                    raise ex
+        let private appendMessage (stream: Stream) blob =
+            if not stream.CanSeek then
+                failwith "Stream can not seek and therefore will never find its own end!"
+            else
+                stream.Seek(0L, SeekOrigin.End) |> ignore
+                serializeMessage stream blob
+        let getAll<'T> =
+            let mutable typeMap = Map.empty<string,int>
+            let serializer = createTypeModel ()
+            let tryGetTypeId (t: Type) =
+                match t.GetTypeInfo() |> fun ti -> ti.GetCustomAttribute(typeof<TypeMapAttribute>) with
+                | null -> None
+                | (att: Attribute) -> att :?> TypeMapAttribute |> fun a ->  Some a.Identifier
+            fun (stream: Stream) ->
+                let tn = typeof<'T>.FullName 
+                match Map.tryFind tn typeMap with
+                | Some i ->
+                    serializer.DeserializeItems<byte array>(stream, PrefixStyle.Base128, i)
+                    |> Seq.map Proto.deserialize<'T>
+                    |> Seq.cache
+                | _ -> 
+                    match tryGetTypeId typeof<'T> with
+                    | None -> failwith "Unable to deserialize this type of data"
+                    | Some i -> 
+                        serializer.DeserializeItems<byte array>(stream, PrefixStyle.Base128, i)
+                        |> Seq.map Proto.deserialize<'T>
+                        |> Seq.cache
+        let append<'T> stream (data: 'T) =
+            match data |> serializeToMessage with
+            | None -> failwith "Unable to serialize data to blob"
+            | Some b -> b |> appendMessage stream
