@@ -6,3 +6,7 @@
 * Added derializer for FSharp Option type and ability to serialize types implementing ToProto within a ToProto function of another type.
 ### 0.5.0 - 23.04.2017
 * Added message ability to encode closed messages with Base128 length prefix to store several messages in a file or serialize several messages to a network stream.
+### 0.5.6 - 24.04.2017
+* Extended message module to append multiple messages and fixed serialization of embedded subtypes implementing ToProto and FromProto
+### 0.5.7 - 24.04.2017
+* Added writer for single byte.

@@ -12,6 +12,9 @@ let reader = new ProtoReader(ms, null, null)
 reader.TryReadFieldHeader(1)
 reader.ReadFieldHeader()
 reader.ReadString()
+
+ProtoWriter.WriteFieldHeader(1, WireType.Variant, writer)
+ProtoWriter.WriteByte(3uy, writer)
 let optBuf = [|8uy; 1uy; 18uy; 7uy; 10uy; 5uy; 65uy; 114uy; 115uy; 99uy; 104uy|]
 let buffer = [|10uy; 5uy; 65uy; 114uy; 115uy; 99uy; 104uy|]
 
@@ -22,6 +25,7 @@ reader.Dispose()
 ms.Dispose()
 
 open Microsoft.FSharp.Reflection
+open System.Reflection
 
 let opt = Some 3
 let n = None
@@ -40,61 +44,71 @@ open System.IO
 open Proton
 open Proton.Operators
 
+type Discriminator =
+    | Dumb
+    | Idiot
+    | Normal of float
+    with
+        static member ToProto (x: Discriminator) =
+            match x with
+            | Dumb -> Proto.write 1 0uy
+            | Idiot -> Proto.write 1 1uy
+            | Normal f -> Proto.write 1 2uy *> Proto.write 2 f
+        static member FromProto (_: Discriminator) =
+            proto {
+                let! i = Proto.read 1
+                match i with
+                | 0uy -> return Dumb
+                | 1uy -> return Idiot
+                | 2uy -> 
+                    let! f = Proto.read 2
+                    return Normal f
+                | x -> return! Proto.error (sprintf "Expected Discriminator but got %A" x)
+            }
+
 [<TypeMap(12)>]
 type Something =
     {
         Some: int
         Thing: string option
+        Discriminator: Discriminator
     }
     with
         static member ToProto (x: Something) =
             Proto.write 1 x.Some
             *> Proto.writeOption 2 x.Thing
+            *> Proto.write 3 x.Discriminator
         static member FromProto (_: Something) =
             proto {
                 let! s = Proto.read 1
                 let! t = Proto.readOption 2
-                return { Some = s; Thing = t}
+                let! d = Proto.read 3
+                return { Some = s; Thing = t; Discriminator = d}
             }
-
-let buf = Proto.serialize { Some = 3; Thing = Some "Arsch" }
+let buf = Proto.serialize { Some = 3; Thing = Some "Arsch"; Discriminator = Idiot }
 printfn "%A" buf
 let orig = Proto.deserialize<Something> buf
 
-let ms = new MemoryStream()
-{ Some = 3; Thing = Some "Arsch" } |> Message.append ms
-ms.Seek(0L, SeekOrigin.Begin)
-let x = Message.getAll<Something> ms |> Seq.toArray
-type Damnit = 
-    {
-        Ass : int
-        Hole : string
-    }
-    with 
-        static member ToProto (x: Damnit) =
-            Proto.write 1 x.Ass
-            *> Proto.write 2 x.Hole
-        static member FromProto (_: Damnit) =
-            proto {
-                let! a = Proto.read 1
-                let! h = Proto.read 2
-                return { Ass = a; Hole = h }
-            }
+type FileAction =
+    | Reading
+    | Writing
 
-let dbuf = Proto.serialize { Ass = 3; Hole = "Mongo" }
-let dOrig = Proto.deserialize<Damnit> dbuf
-let ms = System.IO.MemoryStream()
-let w = ProtoBuf.ProtoWriter(ms, null, null)
-ProtoBuf.ProtoWriter.WriteFieldHeader(1,ProtoBuf.WireType.String,w)
-ProtoBuf.ProtoWriter.WriteType(t,w)
-ms.Length
-ms.Dispose()
-w.Close()
+let openFile action path =
+    let fileMode =
+        function
+        | Reading -> FileMode.Open
+        | Writing ->
+            if File.Exists path then FileMode.Open else FileMode.Create
+    let fileAccess = function | Reading -> FileAccess.Read | Writing -> FileAccess.ReadWrite
+    let fileShare = function | Reading -> FileShare.ReadWrite | Writing -> FileShare.Read
+    new FileStream(path, (fileMode action), (fileAccess action), (fileShare action))
 
-open ProtoBuf.Meta
-let tm = TypeModel.Create()
-tm.Compile()
-tm.SerializeWithLengthPrefix(ms, optBuf, typeof<byte array>, PrefixStyle.Base128, 12)
-ms.Length
-optBuf.Length
-ms.ToArray()
+let fp = "/Users/sebastian/Trading/Test.db"
+let fs = fp |> openFile Reading
+[{ Some = 36; Thing = Some "Irgendwas"; Discriminator = Normal 2.2 }; {Some = 26; Thing = Some "Depp"; Discriminator = Dumb}; { Some = 80; Thing = None; Discriminator = Idiot}] |> Message.appendMultiple fs
+fs.Seek(0L, SeekOrigin.Begin)
+fs.Length
+fs.Close()
+fs.Dispose()
+
+let x = Message.getAll<Something> fs |> Seq.toArray

@@ -87,6 +87,7 @@ module Proton
         let inline private writeDateTime i w = BclHelpers.WriteDateTimeWithKind(i,w)
         let inline private writeTimeSpan i w = BclHelpers.WriteTimeSpan(i,w)
         let inline private writeGuid i w = BclHelpers.WriteGuid(i,w)
+        let inline private writeByte i w = ProtoWriter.WriteByte(i,w)
         let inline private writeBytes i w = ProtoWriter.WriteBytes(i,w);
         let inline private writeOptionalInt16 i w = BclHelpers.WriteNetObject
         let inline private withReader<'T> i (f: ProtoReader -> 'T) =
@@ -108,6 +109,7 @@ module Proton
         let inline readDateTime i : Proto<DateTime> = withReader i (fun r -> BclHelpers.ReadDateTime(r))
         let inline readTimeSpan i : Proto<TimeSpan> = withReader i (fun r -> BclHelpers.ReadTimeSpan(r))
         let inline readGuid i : Proto<Guid> = withReader i (fun r -> BclHelpers.ReadGuid(r))
+        let inline readByte i : Proto<byte> = withReader i (fun r -> r.ReadByte())
         let inline readBytes i : Proto<byte array> = withReader i (fun r -> ProtoReader.AppendBytes([||], r))
 
         let inline error<'a> s : Proto<'a> = 
@@ -132,7 +134,11 @@ module Proton
             let mutable map = Map.empty<string,MethodInfo>
             let getM()  =
                 let getTypeForReflection (t: Type) =
-                    if FSharpType.IsUnion t then t.DeclaringType else t
+                    if FSharpType.IsUnion t then 
+                        match t.DeclaringType.DeclaringType with
+                        | null -> t
+                        | _ -> t.DeclaringType
+                    else t
                 let t = a.GetType()
                 match Map.tryFind t.FullName map with
                 | None ->
@@ -146,7 +152,10 @@ module Proton
             let writer = new ProtoWriter(ms,null,null)
             let proto = Writer writer
             match f proto with
-            | Error e, _ -> failwith e
+            | Error e, _ -> 
+                writer :> IDisposable |> fun d -> d.Dispose()
+                ms.Dispose()
+                failwith e
             | _ ->
                 writer.Close()
                 let buf = ms.ToArray()
@@ -204,16 +213,20 @@ module Proton
                         writeStringHeader i w
                         writeGuid x w
                         (Value ()),proto
+                    | :? byte as x ->
+                        writeVariantHeader i w
+                        writeByte x w
+                        (Value ()),proto
                     | :? (byte array) as x ->
                         writeStringHeader i w
                         writeBytes x w
                         (Value ()),proto
-                    | _ -> 
+                    | x -> 
                         try
                             writeStringHeader i w
                             serialize value |> fun buf -> writeBytes buf w
                             (Value()),proto
-                        with _ -> (Error "No writer defined for this type!"),proto
+                        with ex -> (Error (sprintf "No writer defined for type %s!" (x.GetType().FullName)) ),proto
         let inline writeOption<'T> i (value: Option<'T>) : Proto<unit> =
             fun proto ->
                 match proto with
@@ -276,6 +289,7 @@ module Proton
             let dateTimeName = typeof<DateTime>.FullName
             let timeSpanName = typeof<TimeSpan>.FullName
             let guidName = typeof<Guid>.FullName
+            let byteName = typeof<byte>.FullName
             let bytesName = typeof<byte array>.FullName
             fun proto ->
                 match typeof<'T>.FullName with
@@ -290,6 +304,7 @@ module Proton
                 | x when x=dateTimeName -> readDateTime i proto |> fun (r,_) -> (r |> wrap<DateTime,'T>),proto
                 | x when x=timeSpanName -> readTimeSpan i proto |> fun (r,_) -> (r |> wrap<TimeSpan,'T>),proto
                 | x when x=guidName -> readGuid i proto |> fun (r,_) -> (r |> wrap<Guid,'T>),proto
+                | x when x=byteName -> readByte i proto |> fun (r,_) -> (r |> wrap<byte,'T>),proto
                 | x when x=bytesName -> readBytes i proto |> fun (r,_) -> (r |> wrap<byte array,'T>),proto
                 | _ ->
                     try
@@ -395,5 +410,20 @@ module Proton
                         |> Seq.cache
         let append<'T> stream (data: 'T) =
             match data |> serializeToMessage with
-            | None -> failwith "Unable to serialize data to blob"
+            | None -> failwith "Unable to serialize data to message."
             | Some b -> b |> appendMessage stream
+        let appendMultiple<'T> (stream: Stream) (data: 'T seq) =
+            let msgs = data |> Seq.choose serializeToMessage |> Seq.cache
+            match (msgs |> Seq.length) = (data |> Seq.length) with
+            | false -> failwith "Unable to serialize all data to message."
+            | _ ->
+                let ms = new MemoryStream()
+                msgs |> Seq.iter (appendMessage ms)
+                ms.Seek(0L, SeekOrigin.Begin) |> ignore
+                if not stream.CanSeek then
+                    failwith "Stream can not seek and therefore will never find its own end!"
+                else
+                    stream.Seek(0L, SeekOrigin.End) |> ignore
+                    ms.CopyTo(stream)
+                    ms.Flush()
+                    ms.Dispose()
