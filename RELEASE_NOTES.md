@@ -10,3 +10,5 @@
 * Extended message module to append multiple messages and fixed serialization of embedded subtypes implementing ToProto and FromProto
 ### 0.5.7 - 24.04.2017
 * Added writer for single byte.
+### 0.6.0 - 16.10.2017
+* Added function to get single message from byte array.

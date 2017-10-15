@@ -161,8 +161,7 @@ module Proton
                 let buf = ms.ToArray()
                 writer :> IDisposable |> fun d -> d.Dispose()
                 ms.Dispose()
-                buf           
-
+                buf
         let inline write<'T> i (value: 'T) : Proto<unit> =
             fun proto ->
                 match proto with
@@ -408,6 +407,29 @@ module Proton
                         serializer.DeserializeItems<byte array>(stream, PrefixStyle.Base128, i)
                         |> Seq.map Proto.deserialize<'T>
                         |> Seq.cache
+        let tryGetSingle<'T> =
+            let mutable typeMap = Map.empty<string,int>
+            let serializer = createTypeModel ()
+            let tryGetTypeId (t: Type) =
+                match t.GetTypeInfo() |> fun ti -> ti.GetCustomAttribute(typeof<TypeMapAttribute>) with
+                | null -> None
+                | (att: Attribute) -> att :?> TypeMapAttribute |> fun a ->  Some a.Identifier
+            fun (buffer: byte array) ->
+                using (new MemoryStream(buffer)) (fun ms ->
+                    let tn = typeof<'T>.FullName 
+                    match Map.tryFind tn typeMap with
+                    | Some i ->
+                        serializer.DeserializeItems<byte array>(ms, PrefixStyle.Base128, i)
+                        |> Seq.map Proto.deserialize<'T>
+                        |> Seq.tryHead
+                    | _ -> 
+                        match tryGetTypeId typeof<'T> with
+                        | None -> failwith "Unable to deserialize this type of data"
+                        | Some i -> 
+                            serializer.DeserializeItems<byte array>(ms, PrefixStyle.Base128, i)
+                            |> Seq.map Proto.deserialize<'T>
+                            |> Seq.tryHead
+                )
         let append<'T> stream (data: 'T) =
             match data |> serializeToMessage with
             | None -> failwith "Unable to serialize data to message."
