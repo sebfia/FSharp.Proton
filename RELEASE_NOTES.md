@@ -12,3 +12,5 @@
 * Added writer for single byte.
 ### 0.6.0 - 16.10.2017
 * Added function to get single message from byte array.
+### 0.6.5 - 01.11.2017
+* Added function to serialize single message to byte array. Improved performance on message functions

@@ -350,6 +350,9 @@ module Proton
     [<RequireQualifiedAccess>]
     module Message =
         open ProtoBuf.Meta
+        type private ITypeMap =
+            abstract member AddNew: string -> int -> unit
+            abstract member TryGet: int -> string option
         let inline private createTypeModel () =
             let typeModel = TypeModel.Create()
             typeModel.CompileInPlace()
@@ -407,33 +410,23 @@ module Proton
                         serializer.DeserializeItems<byte array>(stream, PrefixStyle.Base128, i)
                         |> Seq.map Proto.deserialize<'T>
                         |> Seq.cache
-        let tryGetSingle<'T> =
-            let mutable typeMap = Map.empty<string,int>
-            let serializer = createTypeModel ()
-            let tryGetTypeId (t: Type) =
-                match t.GetTypeInfo() |> fun ti -> ti.GetCustomAttribute(typeof<TypeMapAttribute>) with
-                | null -> None
-                | (att: Attribute) -> att :?> TypeMapAttribute |> fun a ->  Some a.Identifier
-            fun (buffer: byte array) ->
-                using (new MemoryStream(buffer)) (fun ms ->
-                    let tn = typeof<'T>.FullName 
-                    match Map.tryFind tn typeMap with
-                    | Some i ->
-                        serializer.DeserializeItems<byte array>(ms, PrefixStyle.Base128, i)
-                        |> Seq.map Proto.deserialize<'T>
-                        |> Seq.tryHead
-                    | _ -> 
-                        match tryGetTypeId typeof<'T> with
-                        | None -> failwith "Unable to deserialize this type of data"
-                        | Some i -> 
-                            serializer.DeserializeItems<byte array>(ms, PrefixStyle.Base128, i)
-                            |> Seq.map Proto.deserialize<'T>
-                            |> Seq.tryHead
-                )
-        let append<'T> stream (data: 'T) =
+        let tryGetSingle<'T> (buffer: byte array) =
+            using (new MemoryStream(buffer)) (fun ms -> 
+                ms.Seek(0L, SeekOrigin.Begin) |> ignore
+                getAll<'T> ms |> Seq.tryHead
+            )
+        let append stream data =
             match data |> serializeToMessage with
             | None -> failwith "Unable to serialize data to message."
             | Some b -> b |> appendMessage stream
+        let tryWriteSingle data =
+            match data |> serializeToMessage with
+            | None -> None
+            | Some b ->
+                using (new MemoryStream()) (fun ms -> 
+                    b |> appendMessage ms
+                    ms.ToArray() |> Some
+                )
         let appendMultiple<'T> (stream: Stream) (data: 'T seq) =
             let msgs = data |> Seq.choose serializeToMessage |> Seq.cache
             match (msgs |> Seq.length) = (data |> Seq.length) with
