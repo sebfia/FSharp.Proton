@@ -18,7 +18,7 @@ let description = summary
 
 let configuration = "Release"
 
-let path = "." |> FullName
+let path = "./src/Proton" |> FullName
 
 let deployDir = "./deploy"
 
