@@ -1,9 +1,9 @@
 source https://api.nuget.org/v3/index.json
-
+storage:none
 nuget FSharp.Core
 nuget protobuf-net
 
 group build
 source https://www.nuget.org/api/v2
-
+storage:none
 nuget FAKE

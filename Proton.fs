@@ -123,7 +123,7 @@ module Proton
 
         let inline serializeInFrame<'T> (f:'T -> Proto -> ProtoResult<unit>*Proto) a =
             let ms = new MemoryStream()
-            let w = new ProtoWriter(ms,null,null)
+            let w = ProtoWriter.Create(ms,null,null)
             f a (Writer w) |> ignore
             w.Close()
             let result = ms.ToArray()
@@ -149,7 +149,7 @@ module Proton
             let m = getM()
             let f = m.Invoke(null, [|a |> box|]):?> Proto<unit>
             let ms = new IO.MemoryStream()
-            let writer = new ProtoWriter(ms,null,null)
+            let writer = ProtoWriter.Create(ms,null,null)
             let proto = Writer writer
             match f proto with
             | Error e, _ -> 
@@ -233,7 +233,7 @@ module Proton
                 | Writer topWriter ->
                     writeStringHeader i topWriter
                     let ms = new MemoryStream()
-                    let w = new ProtoWriter(ms, null, null)
+                    let w = ProtoWriter.Create(ms, null, null)
                     match value with
                     | None -> 
                         writeVariantHeader 1 w
@@ -263,7 +263,7 @@ module Proton
                     o :?> Proto<'a>
             let f = getF()
             let ms = new IO.MemoryStream(buffer)
-            let reader = new ProtoReader(ms, null, null)
+            let reader = ProtoReader.Create(ms, null, null)
             let proto = Reader reader
             match f proto with
             | Error e, _ -> failwith e
@@ -315,7 +315,7 @@ module Proton
                     with _ -> (Error "No reader found for this type"),proto
         let inline deserializeInFrame<'T> (f: Proto -> ProtoResult<'T>*Proto) (buffer: byte array) : 'T =
             let ms = new MemoryStream(buffer)
-            let r = new ProtoReader(ms, null, null)
+            let r = ProtoReader.Create(ms, null, null)
             let proto = Reader r
             match f proto with
             | (Value t),_ -> 
@@ -333,7 +333,7 @@ module Proton
                 match readBytes i proto with
                 | (Value buf),_ ->
                     let ms = new MemoryStream(buf)
-                    let r = new ProtoReader(ms, null, null)
+                    let r = ProtoReader.Create(ms, null, null)
                     let p = Reader r
                     match readBool 1 p with
                     | (Value b),_ ->
@@ -357,13 +357,13 @@ module Proton
             let typeModel = TypeModel.Create()
             typeModel.CompileInPlace()
             typeModel
-        let private serializeToMessage =
+        let private serializeToMessage<'T> =
             let mutable typeMap = Map.empty<string,int>
             let tryGetTypeId (t: Type) =
                 match t.GetTypeInfo() |> fun ti -> ti.GetCustomAttribute(typeof<TypeMapAttribute>) with
                 | null -> None
                 | (att: Attribute) -> att :?> TypeMapAttribute |> fun a ->  Some a.Identifier
-            fun a ->
+            fun (a: 'T) ->
                 let t = a.GetType()
                 let tn = t |> fun t -> t.FullName
                 match Map.tryFind tn typeMap with
