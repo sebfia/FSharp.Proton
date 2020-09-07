@@ -45,3 +45,4 @@ Paket.*.targets
 # dotCover
 *.dotCover
 paket-files/
+.ionide

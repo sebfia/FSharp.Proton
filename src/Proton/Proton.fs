@@ -70,7 +70,7 @@ module Proton
         ProtoBuilder ()
 
     module Proto =
-        let inline private writeVariantHeader field writer = ProtoWriter.WriteFieldHeader(field, WireType.Variant, writer)
+        let inline private writeVariantHeader field writer = ProtoWriter.WriteFieldHeader(field, WireType.Varint, writer)
         let inline private writeFixed32Header field writer = ProtoWriter.WriteFieldHeader(field, WireType.Fixed32, writer)
         let inline private writeFixed64Header field writer = ProtoWriter.WriteFieldHeader(field, WireType.Fixed64, writer)
         let inline private writeStringHeader field writer = ProtoWriter.WriteFieldHeader(field, WireType.String, writer)
@@ -83,13 +83,12 @@ module Proton
         let inline private writeSingle i w = ProtoWriter.WriteSingle(i,w)
         let inline private writeBool i w = ProtoWriter.WriteBoolean(i,w)
         let inline private writeString i w = ProtoWriter.WriteString(i,w)
-        let inline private writeDecimal i w = BclHelpers.WriteDecimal(i,w)
-        let inline private writeDateTime i w = BclHelpers.WriteDateTimeWithKind(i,w)
-        let inline private writeTimeSpan i w = BclHelpers.WriteTimeSpan(i,w)
-        let inline private writeGuid i w = BclHelpers.WriteGuid(i,w)
+        let inline private writeDecimal i (w: ProtoWriter) = BclHelpers.WriteDecimal(i,w)
+        let inline private writeDateTime i (w: ProtoWriter) = BclHelpers.WriteDateTimeWithKind(i,w)
+        let inline private writeTimeSpan i (w: ProtoWriter) = BclHelpers.WriteTimeSpan(i,w)
+        let inline private writeGuid i (w: ProtoWriter) = BclHelpers.WriteGuid(i,w)
         let inline private writeByte i w = ProtoWriter.WriteByte(i,w)
         let inline private writeBytes i w = ProtoWriter.WriteBytes(i,w);
-        let inline private writeOptionalInt16 i w = BclHelpers.WriteNetObject
         let inline private withReader<'T> i (f: ProtoReader -> 'T) =
             fun proto ->
                 match proto with
@@ -354,7 +353,7 @@ module Proton
             abstract member AddNew: string -> int -> unit
             abstract member TryGet: int -> string option
         let inline private createTypeModel () =
-            let typeModel = TypeModel.Create()
+            let typeModel = RuntimeTypeModel.Create("model")
             typeModel.CompileInPlace()
             typeModel
         let private serializeToMessage<'T> =

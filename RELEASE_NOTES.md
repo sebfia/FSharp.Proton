@@ -16,3 +16,5 @@
 * Added function to serialize single message to byte array. Improved performance on message functions
 ### 0.6.6 - 04.12.2018
 * Upgraded to latest protobuf-net and modernized codebase.
+### 0.6.7 - 07.09.2020
+* Upgraded to latest protobuf-net and modernized codebase.

@@ -5,8 +5,8 @@ open System.Reflection
 [<assembly: AssemblyTitleAttribute("Proton")>]
 [<assembly: AssemblyProductAttribute("Proton")>]
 [<assembly: AssemblyDescriptionAttribute("A Chiron-like library for serializing and deserializing any instance to and from protobuf.")>]
-[<assembly: AssemblyVersionAttribute("0.6.6")>]
-[<assembly: AssemblyFileVersionAttribute("0.6.6")>]
+[<assembly: AssemblyVersionAttribute("0.6.7")>]
+[<assembly: AssemblyFileVersionAttribute("0.6.7")>]
 [<assembly: AssemblyConfigurationAttribute("Release")>]
 do ()
 
@@ -14,6 +14,6 @@ module internal AssemblyVersionInformation =
     let [<Literal>] AssemblyTitle = "Proton"
     let [<Literal>] AssemblyProduct = "Proton"
     let [<Literal>] AssemblyDescription = "A Chiron-like library for serializing and deserializing any instance to and from protobuf."
-    let [<Literal>] AssemblyVersion = "0.6.6"
-    let [<Literal>] AssemblyFileVersion = "0.6.6"
+    let [<Literal>] AssemblyVersion = "0.6.7"
+    let [<Literal>] AssemblyFileVersion = "0.6.7"
     let [<Literal>] AssemblyConfiguration = "Release"
