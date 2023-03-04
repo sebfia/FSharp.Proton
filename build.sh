@@ -4,7 +4,7 @@ set -eu
 
 cd "$(dirname "$0")"
 
-PAKET_EXE=.paket/paket.exe
+PAKET_EXE="dotnet /Users/sebastian/.dotnet/tools/paket"
 FAKE_EXE=packages/build/FAKE/tools/FAKE.exe
 
 FSIARGS=""
