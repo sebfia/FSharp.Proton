@@ -1,2 +1,3 @@
-protobuf-net
-FSharp.Core
+group main
+    protobuf-net
+    FSharp.Core

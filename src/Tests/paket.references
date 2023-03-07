@@ -1,0 +1,6 @@
+group test
+protobuf-net
+FSharp.Core
+Microsoft.NET.Test.Sdk
+NUnit
+FsUnit

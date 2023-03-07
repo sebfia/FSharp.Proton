@@ -46,3 +46,4 @@ Paket.*.targets
 *.dotCover
 paket-files/
 .ionide
+src/Tests/TestResult.xml
