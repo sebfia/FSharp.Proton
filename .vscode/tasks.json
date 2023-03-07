@@ -1,0 +1,99 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+        {
+            "type": "process",
+            "command": "dotnet",
+            "args": [
+                "build",
+                "${workspaceFolder}/src/Proton/Proton.fsproj",
+                "/property:GenerateFullPaths=true"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "echo": true,
+                "focus": true,
+            },
+            "problemMatcher": [
+                "$msCompile"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "label": "build",
+            "detail": "Build the Proton project using dotnet build"
+        },
+        {
+            "type": "process",
+            "command": "dotnet",
+            "args": [
+                "build",
+                "${workspaceFolder}/src/Tests/Tests.fsproj",
+                "/property:GenerateFullPaths=true"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "echo": true,
+                "focus": true,
+            },
+            "problemMatcher": [
+                "$msCompile"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "label": "build_tests",
+            "detail": "Build the Tests.fsproj project using dotnet build"
+        },
+        {
+            "type": "shell",
+            "command": "dotnet",
+            "args": [
+                "nunit",
+                "${workspaceFolder}/src/Tests/bin/Debug/net7.0/Tests.dll",
+                // "--trace=Verbose"
+                // "/property:GenerateFullPaths=true",
+                // "/consoleloggerparameters:NoSummary"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "echo": true,
+                "focus": true,
+            },
+            "problemMatcher": [
+                "$msCompile"
+            ],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "label": "test",
+            "detail": "Run the nuit tests for Proton."
+        },
+        {
+            "label": "rebuild_and_test",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "build_tests",
+                "test"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "group": "test",
+            "problemMatcher": [
+                "$msCompile"
+            ]
+        }
+    ]
+}
