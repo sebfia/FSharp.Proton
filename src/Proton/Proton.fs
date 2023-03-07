@@ -4,6 +4,7 @@ module Proton
     open System.Reflection
     open ProtoBuf
     open FSharp.Reflection
+    open System.ComponentModel
 
     [<AttributeUsage(AttributeTargets.Class)>]
     type TypeMapAttribute(identifier: int) =
@@ -14,18 +15,17 @@ module Proton
         | Writer of ProtoWriter
     type Proto<'a> = Proto -> ProtoResult<'a>*Proto
     and
-        ProtoResult<'a> =
-            | Value of 'a
-            | Error of string
+        ProtoResult<'a> = Result<'a, string>
+
     [<AutoOpen>]
     module Functional =
         let inline init (a: 'a) : Proto<'a> =
             fun proto ->
-                Value a, proto
+                Ok a, proto
         let inline bind (l: Proto<'a>) (f: 'a -> Proto<'b>) =
             fun proto ->
                 match l proto with
-                | Value a, proto -> (f a) proto
+                | Ok a, proto -> (f a) proto
                 | Error e, proto -> Error e, proto
 
         let inline testb (f: Proto< 'a -> 'b>) (m: Proto<'a>) : Proto<'b> =
@@ -45,6 +45,7 @@ module Proton
             let n3 = apply n2 m2
             apply (apply (init f) m1) m2
 
+    [<AutoOpen>]
     module Operators =
         let inline ( *>) m1 m2 = map2 (fun _ x -> x) m1 m2
     [<AutoOpen>]
@@ -69,13 +70,12 @@ module Proton
     let proto =
         ProtoBuilder ()
 
-    module Proto =
-        let inline private writeVariantHeader field writer = ProtoWriter.WriteFieldHeader(field, WireType.Varint, writer)
+    module Proto = 
+        let inline private writeSignedVarIntHeader field writer = ProtoWriter.WriteFieldHeader(field, WireType.SignedVarint, writer)
+        let inline private writeVarIntHeader field writer = ProtoWriter.WriteFieldHeader(field, WireType.Varint, writer)
         let inline private writeFixed32Header field writer = ProtoWriter.WriteFieldHeader(field, WireType.Fixed32, writer)
         let inline private writeFixed64Header field writer = ProtoWriter.WriteFieldHeader(field, WireType.Fixed64, writer)
         let inline private writeStringHeader field writer = ProtoWriter.WriteFieldHeader(field, WireType.String, writer)
-        let inline private writeStartGroupHeader field writer = ProtoWriter.WriteFieldHeader(field, WireType.StartGroup, writer)
-        let inline private writeEndGroupHeader field writer = ProtoWriter.WriteFieldHeader(field, WireType.EndGroup, writer)
         let inline private writeInt16 i w = ProtoWriter.WriteInt16(i,w)
         let inline private writeInt32 i w = ProtoWriter.WriteInt32(i,w)
         let inline private writeInt64 i w = ProtoWriter.WriteInt64(i,w)
@@ -92,11 +92,11 @@ module Proton
         let inline private withReader<'T> i (f: ProtoReader -> 'T) =
             fun proto ->
                 match proto with
-                | Writer _ -> (Error "Can not read from a writer, dumbass!"),proto
+                | Writer _ -> (Error "Can not read from a writer!"),proto
                 | Reader r ->
                     match r.TryReadFieldHeader(i) with
-                    | false -> Error("This field header does not exist, fucking idiot!"),proto
-                    | true -> (f r |> Value),proto
+                    | false -> Error("This field header does not exist!"),proto
+                    | true -> try (f r |> Ok),proto with ex -> (Error $"An exeption was thrown while trying to decode a value.{Environment.NewLine}{ex}"),proto
         let inline readInt16 i : Proto<int16> = withReader i (fun r -> r.ReadInt16())
         let inline readInt i : Proto<int> = withReader i (fun r -> r.ReadInt32())
         let inline readInt64 i : Proto<int64> = withReader i (fun r -> r.ReadInt64())
@@ -118,7 +118,7 @@ module Proton
         let bytesToHex bytes = 
             bytes 
             |> Array.map (fun (x : byte) -> System.String.Format("{0:X2}", x))
-            |> String.concat System.String.Empty
+            |> String.concat String.Empty
 
         let inline serializeInFrame<'T> (f:'T -> Proto -> ProtoResult<unit>*Proto) a =
             let ms = new MemoryStream()
@@ -141,7 +141,7 @@ module Proton
                 let t = a.GetType()
                 match Map.tryFind t.FullName map with
                 | None ->
-                    let m = getTypeForReflection (t) |> fun rt -> rt.GetTypeInfo() |> fun ti -> ti.GetMethod("ToProto", Reflection.BindingFlags.Public|||Reflection.BindingFlags.Static)
+                    let m = getTypeForReflection (t) |> fun rt -> rt.GetTypeInfo() |> fun ti -> ti.GetMethod("Encoder", Reflection.BindingFlags.Public|||Reflection.BindingFlags.Static)
                     map <- Map.add t.FullName m map
                     m
                 | Some m -> m
@@ -161,6 +161,303 @@ module Proton
                 writer :> IDisposable |> fun d -> d.Dispose()
                 ms.Dispose()
                 buf
+        let inline deserializeInFrame<'T> (f: Proto -> ProtoResult<'T>*Proto) (buffer: byte array) : ProtoResult<'T> =
+            use ms = new MemoryStream(buffer)
+            use r = ProtoReader.Create(ms, null, null)
+            let proto = Reader r
+            match f proto with
+            | (Ok t),_ -> Ok t
+            | (Error e),_ -> Error e
+
+        // get buffer for resp. field
+        // initialize new proto reader with buffer
+        // read header and integer at field 1 (varint) -> length of array
+        // zero-create an array with length
+        // from field 2 until field 1 + length do
+            // advance reader by reading header (string)
+            // read bytes at field
+            // deserialze bytes in frame to object using the decoder that was passed to mother method as argument
+            // append deserialized object to array at position field - 2
+        // return the array 
+        // NOTE: This could be improved by using stack memory instead of streams and byte arrays
+        let inline deserializeArray<'T> (f: Proto -> ProtoResult<'T>*Proto) (buffer: byte array) : ProtoResult<'T array> =
+            
+            use ms = new MemoryStream(buffer)
+            use r = ProtoReader.Create(ms, null, null)
+
+            if r.TryReadFieldHeader(1) |> not then Error "No field header found for array length!" else
+            let length = r.ReadInt32()
+            let result = Array.zeroCreate<'T> length
+
+            for i = 2 to (length + 1) do
+                if r.TryReadFieldHeader(i) then
+                    let buf = ProtoReader.AppendBytes(Array.empty, r)
+                    match deserializeInFrame f buf with
+                    | Ok o -> result[i - 2] <- o
+                    | Error e -> failwith $"Unable to read object from array buffer at position {i - 2} Reson: {e}" // there is room for improvement here
+            Ok result
+
+        let inline serializeArray<'T> (f: 'T -> Proto<unit>) (values: 'T array) : ProtoResult<byte array> =
+
+            use ms = new MemoryStream()
+            use w = ProtoWriter.Create(ms, null, null)
+        
+            ProtoWriter.WriteFieldHeader(1, WireType.Varint, w)
+            ProtoWriter.WriteInt32(values.Length, w)
+
+            for i = 0 to (values.Length - 1) do
+                let buf = serializeInFrame f values[i]
+                ProtoWriter.WriteFieldHeader((i + 2), WireType.String, w)
+                ProtoWriter.WriteBytes(buf, w)
+            
+            w.Close()
+
+            Ok (ms.ToArray())
+
+        let inline serializeOption<'T> (f: 'T -> Proto<unit>) value : ProtoResult<byte array> =
+
+            use ms = new MemoryStream()
+            use w = ProtoWriter.Create(ms, null, null)
+        
+            ProtoWriter.WriteFieldHeader(1, WireType.Varint, w)
+            match value with
+            | None -> ProtoWriter.WriteByte(0uy, w)
+            | Some x ->
+                ProtoWriter.WriteByte(1uy, w)
+                let buf = serializeInFrame f x
+                ProtoWriter.WriteFieldHeader(2, WireType.String, w)
+                ProtoWriter.WriteBytes(buf, w)
+            
+            w.Close()
+
+            Ok (ms.ToArray())
+
+        let inline deserializeOption<'T> (f: Proto -> ProtoResult<'T>*Proto) (buffer: byte array) : ProtoResult<'T option> =
+            
+            use ms = new MemoryStream(buffer)
+            use r = ProtoReader.Create(ms, null, null)
+
+            if r.TryReadFieldHeader(1) |> not then Error "No field header option discriminator!" else
+            
+            match r.ReadByte() with
+            | 0uy -> None |> Ok
+            | 1uy ->  
+                if r.TryReadFieldHeader(2) |> not then Error "No field header for Some option found!" else
+                let buf = ProtoReader.AppendBytes(Array.empty, r)
+                match deserializeInFrame f buf with
+                | Ok x -> Some x |> Ok
+                | Error e -> Error e
+            | _ -> Error "Invalid data for Option type!"
+
+        [<RequireQualifiedAccess>]
+        type Decode =
+            static member inline int16 i = readInt16 i
+            static member inline int32 i = readInt i
+            static member inline int64 i = readInt64 i
+            static member inline float i = readFloat i
+            static member inline float32 i = readSingle i
+            static member inline boolean i = readBool i
+            static member inline byte i = readByte i
+            static member inline bytes i = readBytes i
+            static member inline string i = readString i
+            static member inline decimal i = readDecimal i
+            static member inline guid (i: int) = withReader i (fun r ->
+                // let state = ProtoReader.State.Create(new MemoryStream(), Meta.RuntimeTypeModel.Default)
+                ProtoReader.AppendBytes([||], r) |> Guid
+            )
+            static member inline dateTime i = readDateTime i
+            static member inline timeSpan i = readTimeSpan i
+            static member inline dateTimeOffset (i: int) : Proto<DateTimeOffset> = (fun p ->
+                match p with
+                | Writer _ -> failwith "Can not use a writer for reading!"
+                | Reader r -> 
+                    match r.TryReadFieldHeader(i) with
+                    | true ->
+                        let bytes = ProtoReader.AppendBytes(Array.empty, r)
+                        let frameResult = 
+                            deserializeInFrame (proto {
+                                let! (date: DateTime) = Decode.dateTime 1
+                                let! offset = Decode.timeSpan 2
+                                return DateTimeOffset(date, offset)
+                            }) bytes
+                        frameResult,p
+                    | _ -> failwith "Unable to read field header for DateTimeOffset!"
+            )
+
+            static member inline array<'a> decoder i : Proto<'a array> = (fun p ->
+                match p with
+                | Writer _ -> failwith "Can not use a writer for reading!"
+                | Reader r -> 
+                    match r.TryReadFieldHeader(i) with
+                    | true ->
+                        let bytes = ProtoReader.AppendBytes(Array.empty, r)
+                        (deserializeArray decoder bytes),p
+                    | _ -> (Error "Unable to read field header for array"),p
+            )
+            static member inline option<'a> decoder i : Proto<'a option> = (fun p ->
+                match p with
+                | Writer _ -> failwith "Can not use a writer for reading!"
+                | Reader r -> 
+                    match r.TryReadFieldHeader(i) with
+                    | true ->
+                        let bytes = ProtoReader.AppendBytes(Array.empty, r)
+                        (deserializeOption decoder bytes),p
+                    | _ -> (Error "Unable to read field header for array"),p
+            )
+            static member inline fromBytes decoder (bytes: byte array) = 
+                use ms = new MemoryStream(bytes)
+                use r = ProtoReader.Create(ms, null, null)
+                let proto = Reader r
+                match decoder proto with
+                | (Ok t),_ -> t
+                | (Error e),_ -> failwith e
+        
+        [<RequireQualifiedAccess>]
+        type Encode =
+            [<EditorBrowsableAttribute(EditorBrowsableState.Never)>]
+            static member inline private encodeWithWriter f : Proto<unit> = (fun p ->
+                match p with
+                | Reader _ -> failwith "Can not write to a reader!"
+                | Writer w -> match f w with | Ok () -> (Ok ()),p | Error (e: string) -> (Error e),p)
+            [<EditorBrowsableAttribute(EditorBrowsableState.Never)>]
+            static member inline private safeCage f =
+                try
+                    f()
+                    Ok ()
+                with ex -> Error $"An exeption was thrown while trying to encode a value.{Environment.NewLine}{ex}"
+            static member inline int16 i value : Proto<unit> = Encode.encodeWithWriter(fun w ->
+                Encode.safeCage(fun _ ->
+                    writeVarIntHeader i w
+                    writeInt16 value w
+                )
+            )
+            static member inline int32 i value : Proto<unit> = Encode.encodeWithWriter(fun w ->
+                Encode.safeCage(fun _ ->
+                    writeVarIntHeader i w
+                    writeInt32 value w
+                )
+            )
+            static member inline int64 i value : Proto<unit> = Encode.encodeWithWriter(fun w ->
+                Encode.safeCage(fun _ ->
+                    writeVarIntHeader i w
+                    writeInt64 value w
+                )
+            )
+            static member inline float i value : Proto<unit> = Encode.encodeWithWriter(fun w ->
+                Encode.safeCage(fun _ ->
+                    writeFixed64Header i w
+                    writeDouble value w
+                )
+            )
+            static member inline float32 i value : Proto<unit> = Encode.encodeWithWriter(fun w ->
+                Encode.safeCage(fun _ ->
+                    writeFixed32Header i w
+                    writeSingle value w
+                )
+            )
+            static member inline boolean i value : Proto<unit> = Encode.encodeWithWriter(fun w ->
+                Encode.safeCage(fun _ -> 
+                    writeVarIntHeader i w
+                    writeBool value w
+                )
+            )
+            static member inline byte i value : Proto<unit> = Encode.encodeWithWriter(fun w ->
+                Encode.safeCage(fun _ -> 
+                    writeVarIntHeader i w
+                    writeByte value w
+                )
+            )
+            static member inline bytes i value : Proto<unit> = Encode.encodeWithWriter(fun w ->
+                Encode.safeCage(fun _ ->
+                    writeStringHeader i w
+                    writeBytes value w
+                )
+            )
+            static member inline string i value : Proto<unit> = Encode.encodeWithWriter(fun w ->
+                Encode.safeCage(fun _ ->
+                    writeStringHeader i w
+                    writeString value w
+                )
+            )
+            static member inline decimal i value : Proto<unit> = Encode.encodeWithWriter(fun w ->
+                Encode.safeCage(fun _ ->
+                    writeStringHeader i w
+                    writeDecimal value w
+                )
+            )
+            static member inline dateTime i value : Proto<unit> = Encode.encodeWithWriter(fun w ->
+                Encode.safeCage(fun _ ->
+                    writeStringHeader i w
+                    writeDateTime value w
+                )
+            )
+            static member inline timeSpan i value : Proto<unit> = Encode.encodeWithWriter(fun w ->
+                Encode.safeCage(fun _ ->
+                    writeStringHeader i w
+                    writeTimeSpan value w
+                )
+            )
+            static member inline guid i (value: Guid) : Proto<unit> = value.ToByteArray() |> Encode.bytes i
+            static member inline dateTimeOffset i value : Proto<unit> = Encode.encodeWithWriter(fun w ->
+                Encode.safeCage(fun _ ->
+                    let bytes = serializeInFrame (fun (d: DateTimeOffset) -> Encode.dateTime 1 d.DateTime *> Encode.timeSpan 2 d.Offset) value
+                    writeStringHeader i w
+                    writeBytes bytes w
+                )
+            )
+            static member inline array<'a> encoder i (values: 'a array) : Proto<unit> = Encode.encodeWithWriter(fun w ->
+                match serializeArray encoder values with
+                | Ok buffer ->
+                    writeStringHeader i w
+                    writeBytes buffer w
+                    Ok ()
+                | Error e -> Error e
+            )
+            static member inline option<'a> encoder i (value: 'a option) : Proto<unit> = Encode.encodeWithWriter(fun w ->
+                match serializeOption encoder value with
+                | Ok buffer ->
+                    writeStringHeader i w
+                    writeBytes buffer w
+                    Ok ()
+                | Error e -> Error e
+            )
+            static member inline toBytes (f) a =
+                use ms = new MemoryStream()
+                use w = ProtoWriter.Create(ms,null,null)
+                f a (Writer w) |> ignore
+                w.Close()
+                let result = ms.ToArray()
+                // w :> IDisposable |> fun d -> d.Dispose()
+                // ms.Dispose()
+                result
+
+
+        
+            
+
+            // static member inline writeOption<'T> i (value: Option<'T>) : Proto<unit> = fun proto ->
+            //     match proto with
+            //     | Reader _ -> (Error "Can not write to a reader, dumbass!"),proto
+            //     | Writer topWriter ->
+            //         writeStringHeader i topWriter
+            //         let ms = new MemoryStream()
+            //         let w = ProtoWriter.Create(ms, null, null)
+            //         match value with
+            //         | None -> 
+            //             writeVarIntHeader 1 w
+            //             writeBool false w
+            //         | Some a ->
+            //             writeVarIntHeader 1 w
+            //             writeBool true w
+            //             writeStringHeader 2 w
+            //             serializeInFrame (write 1) a |> fun buf -> writeBytes buf w
+            //         w.Close()
+            //         writeBytes (ms.ToArray()) topWriter
+            //         w :> IDisposable |> fun d -> d.Dispose()
+            //         ms.Dispose()
+            //         (Ok ()),proto
+
+        
         let inline write<'T> i (value: 'T) : Proto<unit> =
             fun proto ->
                 match proto with
@@ -168,85 +465,64 @@ module Proton
                 | Writer w ->
                     match box value with
                     | :? int16 as x ->
-                        writeVariantHeader i w
+                        writeVarIntHeader i w
                         writeInt16 x w
-                        (Value ()),proto
+                        (Ok ()),proto
                     | :? int as x ->
-                        writeVariantHeader i w
+                        writeVarIntHeader i w
                         writeInt32 x w
-                        (Value ()),proto
+                        (Ok ()),proto
                     | :? int64 as x ->
-                        writeVariantHeader i w
+                        writeVarIntHeader i w
                         writeInt64 x w
-                        (Value ()),proto
+                        (Ok ()),proto
                     | :? float as x ->
                         writeFixed64Header i w
                         writeDouble x w
-                        (Value ()),proto
+                        (Ok ()),proto
                     | :? float32 as x ->
                         writeFixed32Header i w
                         writeSingle x w
-                        (Value ()),proto
+                        (Ok ()),proto
                     | :? string as x ->
                         writeStringHeader i w
                         writeString x w
-                        (Value ()),proto
+                        (Ok ()),proto
                     | :? bool as x ->
-                        writeVariantHeader i w
+                        writeVarIntHeader i w
                         writeBool x w
-                        (Value ()),proto
+                        (Ok ()),proto
                     | :? decimal as x ->
                         writeStringHeader i w
                         writeDecimal x w
-                        (Value ()),proto
+                        (Ok ()),proto
                     | :? DateTime as x ->
                         writeStringHeader i w
                         writeDateTime x w
-                        (Value ()),proto
+                        (Ok ()),proto
                     | :? TimeSpan as x ->
                         writeStringHeader i w
                         writeTimeSpan x w
-                        (Value ()),proto
+                        (Ok ()),proto
                     | :? Guid as x ->
                         writeStringHeader i w
                         writeGuid x w
-                        (Value ()),proto
+                        (Ok ()),proto
                     | :? byte as x ->
-                        writeVariantHeader i w
+                        writeVarIntHeader i w
                         writeByte x w
-                        (Value ()),proto
+                        (Ok ()),proto
                     | :? (byte array) as x ->
                         writeStringHeader i w
                         writeBytes x w
-                        (Value ()),proto
+                        (Ok ()),proto
                     | x -> 
                         try
                             writeStringHeader i w
                             serialize value |> fun buf -> writeBytes buf w
-                            (Value()),proto
+                            (Ok()),proto
                         with ex -> (Error (sprintf "No writer defined for type %s!" (x.GetType().FullName)) ),proto
-        let inline writeOption<'T> i (value: Option<'T>) : Proto<unit> =
-            fun proto ->
-                match proto with
-                | Reader _ -> (Error "Can not write to a reader, dumbass!"),proto
-                | Writer topWriter ->
-                    writeStringHeader i topWriter
-                    let ms = new MemoryStream()
-                    let w = ProtoWriter.Create(ms, null, null)
-                    match value with
-                    | None -> 
-                        writeVariantHeader 1 w
-                        writeBool false w
-                    | Some a ->
-                        writeVariantHeader 1 w
-                        writeBool true w
-                        writeStringHeader 2 w
-                        serializeInFrame (write 1) a |> fun buf -> writeBytes buf w
-                    w.Close()
-                    writeBytes (ms.ToArray()) topWriter
-                    w :> IDisposable |> fun d -> d.Dispose()
-                    ms.Dispose()
-                    (Value ()),proto
+        
         
         let inline deserialize<'a> (buffer: byte array) =
             let mutable map = Map.empty<string,obj>
@@ -254,26 +530,24 @@ module Proton
                 let t = typeof<'a>
                 match Map.tryFind t.FullName map with
                 | None ->
-                    let m = t.GetTypeInfo() |> fun ti -> ti.GetMethod("FromProto", Reflection.BindingFlags.Public|||Reflection.BindingFlags.Static)
+                    let m = t.GetTypeInfo() |> fun ti -> ti.GetMethod("Decoder", Reflection.BindingFlags.Public|||Reflection.BindingFlags.Static)
                     let o = m.Invoke(null, [|null|])
                     map <- Map.add t.FullName o map
                     o :?> Proto<'a>
                 | Some o ->
                     o :?> Proto<'a>
             let f = getF()
-            let ms = new IO.MemoryStream(buffer)
-            let reader = ProtoReader.Create(ms, null, null)
+            use ms = new IO.MemoryStream(buffer)
+            use reader = ProtoReader.Create(ms, null, null)
             let proto = Reader reader
             match f proto with
             | Error e, _ -> failwith e
-            | Value a,_ ->
-                reader.Dispose()
-                ms.Dispose()
-                a
+            | Ok a,_ -> a
+
         let inline private wrap<'u,'a> =
                 let [|fSucc;fErr|] = FSharpType.GetUnionCases typeof<ProtoResult<'a>> |> Array.map FSharpValue.PreComputeUnionConstructor
                 function
-                | Value (x: 'u) -> fSucc [|x |> box|] :?> ProtoResult<'a>
+                | Ok (x: 'u) -> fSucc [|x |> box|] :?> ProtoResult<'a>
                 | Error e -> fErr [|e |> box|] :?> ProtoResult<'a>
         let inline read<'T> i : Proto<'T> =
             let int16Name = typeof<int16>.FullName
@@ -307,42 +581,30 @@ module Proton
                 | _ ->
                     try
                         match readBytes i proto with
-                        | (Value buf),_ -> 
+                        | (Ok buf),_ -> 
                             let result = deserialize<'T> buf
-                            (Value result),proto
+                            (Ok result),proto
                         | (Error e),_ -> (Error e),proto
                     with _ -> (Error "No reader found for this type"),proto
-        let inline deserializeInFrame<'T> (f: Proto -> ProtoResult<'T>*Proto) (buffer: byte array) : 'T =
-            let ms = new MemoryStream(buffer)
-            let r = ProtoReader.Create(ms, null, null)
-            let proto = Reader r
-            match f proto with
-            | (Value t),_ -> 
-                r.Dispose()
-                ms.Dispose()
-                t
-            | (Error e),_ -> 
-                r.Dispose()
-                ms.Dispose()
-                failwith e
+        
 
         let inline readOption<'T> i : Proto<Option<'T>> =
             let [|fNone;fSome|] = FSharpType.GetUnionCases typeof<Option<'T>> |> Array.map FSharpValue.PreComputeUnionConstructor
             fun proto ->
                 match readBytes i proto with
-                | (Value buf),_ ->
+                | (Ok buf),_ ->
                     let ms = new MemoryStream(buf)
                     let r = ProtoReader.Create(ms, null, null)
                     let p = Reader r
                     match readBool 1 p with
-                    | (Value b),_ ->
+                    | (Ok b),_ ->
                         match b with
-                        | false -> fNone [||] :?> Option<'T> |> Value |> fun v -> v,proto
+                        | false -> fNone [||] :?> Option<'T> |> Ok |> fun v -> v,proto
                         | true ->
                             match readBytes 2 p with
-                            | (Value sub),_ ->
+                            | (Ok sub),_ ->
                                 let opt = deserializeInFrame (read<'T> 1) sub |> fun t -> fSome [|t |> box|] :?> Option<'T>
-                                (Value opt),proto
+                                (Ok opt),proto
                             | (Error e),_ -> (Error e),proto
                     | (Error e),_ -> (Error e),proto
                 | (Error e),_ -> (Error e),proto
