@@ -90,5 +90,5 @@ jobs:
         committer_email: actions@github.com
         message: 'Updated and tagged new version.'
         add: ./VERSION
-        new_branch: dev
+        new_branch: master
         tag: mercator-analyzers_v${{ env.VERSION }}
