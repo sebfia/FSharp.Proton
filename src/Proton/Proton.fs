@@ -302,7 +302,17 @@ module Proton
                     | true ->
                         let bytes = ProtoReader.AppendBytes(Array.empty, r)
                         (deserializeOption decoder bytes),p
-                    | _ -> (Error "Unable to read field header for array"),p
+                    | _ -> (Error "Unable to read field header for Option."),p
+            )
+            static member inline object<'a> decoder i : Proto<'a> = (fun p ->
+                match p with
+                | Writer _ -> failwith "Can not use a writer for reading!"
+                | Reader r -> 
+                    match r.TryReadFieldHeader(i) with
+                    | true ->
+                        let bytes = ProtoReader.AppendBytes(Array.empty, r)
+                        (deserializeInFrame decoder bytes),p
+                    | _ -> (Error "Unable to read field header for object"),p
             )
             static member inline fromBytes decoder (bytes: byte array) = 
                 use ms = new MemoryStream(bytes)
@@ -421,41 +431,23 @@ module Proton
                     Ok ()
                 | Error e -> Error e
             )
+            static member inline object<'a> encoder i (value: 'a) : Proto<unit> = Encode.encodeWithWriter(fun w ->
+                try
+                    let buffer = serializeInFrame encoder value
+                    writeStringHeader i w
+                    writeBytes buffer w
+                    Ok()
+                with
+                | ex -> Error $"Error trying to encode object of type {typeof<'a>}.{Environment.NewLine}{ex}"
+            )
+
             static member inline toBytes (f) a =
                 use ms = new MemoryStream()
                 use w = ProtoWriter.Create(ms,null,null)
                 f a (Writer w) |> ignore
                 w.Close()
                 let result = ms.ToArray()
-                // w :> IDisposable |> fun d -> d.Dispose()
-                // ms.Dispose()
                 result
-
-
-        
-            
-
-            // static member inline writeOption<'T> i (value: Option<'T>) : Proto<unit> = fun proto ->
-            //     match proto with
-            //     | Reader _ -> (Error "Can not write to a reader, dumbass!"),proto
-            //     | Writer topWriter ->
-            //         writeStringHeader i topWriter
-            //         let ms = new MemoryStream()
-            //         let w = ProtoWriter.Create(ms, null, null)
-            //         match value with
-            //         | None -> 
-            //             writeVarIntHeader 1 w
-            //             writeBool false w
-            //         | Some a ->
-            //             writeVarIntHeader 1 w
-            //             writeBool true w
-            //             writeStringHeader 2 w
-            //             serializeInFrame (write 1) a |> fun buf -> writeBytes buf w
-            //         w.Close()
-            //         writeBytes (ms.ToArray()) topWriter
-            //         w :> IDisposable |> fun d -> d.Dispose()
-            //         ms.Dispose()
-            //         (Ok ()),proto
 
         
         let inline write<'T> i (value: 'T) : Proto<unit> =

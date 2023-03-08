@@ -24,6 +24,12 @@ module Types =
         | Empty
         | Filled of favorite:Book option*books: Book array
 
+    type Bookstore = {
+        Shape: Shape
+        Bookshelf: Bookshelf
+        FeaturedBook: Book
+    }
+
 
 module Encoder =
     open Proton.Proto
@@ -52,6 +58,11 @@ module Encoder =
             Encode.byte 1 1uy
             *> Encode.option ofBook 2 fave
             *> Encode.array ofBook 3 books
+
+    let ofBookstore (x: Bookstore) =
+        Encode.object ofShape 1 x.Shape
+        *> Encode.object ofBookShelf 2 x.Bookshelf
+        *> Encode.object ofBook 3 x.FeaturedBook
 
 module Decoder =
     open Proton
@@ -84,6 +95,13 @@ module Decoder =
             let! books = Decode.array ofBook 3
             return Filled (fave,books)
         | _ -> return! Proto.error "Invalid data for Bookshelf!"
+    }
+
+    let ofBookstore = proto {
+        let! shape = Decode.object ofShape 1
+        let! shelf = Decode.object ofBookShelf 2
+        let! book = Decode.object ofBook 3
+        return { Shape = shape; Bookshelf = shelf; FeaturedBook = book }
     }
 
 module ``Simple Encoders and Decoders`` =
@@ -236,4 +254,25 @@ module ``Back And Forth With More Complex Types`` =
 
         let buffer = Encode.toBytes Encoder.ofBookShelf expected
         let actual = Decode.fromBytes Decoder.ofBookShelf buffer
+        expected |> should equal actual
+
+    [<Test>]
+    let ``Encoding And Decoding Of Bookstore`` () =
+        let shelf = Filled (
+            Some { Id = Guid.NewGuid(); Title = "Lord of the Rings"; Author = "J.R.R. Tolkien"},
+            [|
+                { Id = Guid.NewGuid(); Title = "Lord of the Rings"; Author = "J.R.R. Tolkien"}
+                { Id = Guid.NewGuid(); Title = "Harry Potter and the Sorcerer's Stone"; Author = "J.K. Rowling"}
+                { Id = Guid.NewGuid(); Title = "And Then There Were None"; Author = "Agatha Christie"}
+                { Id = Guid.NewGuid(); Title = "Alice's Adventures in Wonderland"; Author = "Lewis Carroll"}
+                { Id = Guid.NewGuid(); Title = "The Lion, the Witch, and the Wardrobe"; Author = "C.S. Lewis"}
+            |])
+        let expected = {
+            Shape = Rectangle (10, 20)
+            Bookshelf = shelf
+            FeaturedBook = { Id = Guid.NewGuid(); Title = "The Lion, the Witch, and the Wardrobe"; Author = "C.S. Lewis"}
+        }
+
+        let buffer = Encode.toBytes Encoder.ofBookstore expected
+        let actual = Decode.fromBytes Decoder.ofBookstore buffer
         expected |> should equal actual
