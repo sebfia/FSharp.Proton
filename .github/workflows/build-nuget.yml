@@ -1,0 +1,80 @@
+name: build_nuget_package
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - src/Proton/*.fsproj
+      - src/Proton/*.fs
+      - src/Proton/paket.references
+      - .github/workflows/build-nuget.yml
+
+# permissions are needed if pushing to ghcr.io
+permissions: 
+  packages: write
+
+jobs:
+  build-proton-nuget-package:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+        matrix:
+          dotnet-version: [ '7.0.x' ]
+
+    permissions:
+      contents: read 
+
+    steps:
+    - 
+      name: Checkout
+      uses: actions/checkout@v3
+      with:
+        token: ${{ secrets.PACKAGE_WRITE_TOKEN }}
+    - 
+      name: Setup dotnet
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ matrix.dotnet-version }}
+    -
+      name: Put project file and output path into environment variable.
+      run: |
+        echo "PROJECT_PATH=./src/Proton/Proton.fsproj" >> $GITHUB_ENV
+        echo "OUTPUT_PATH=./src/Proton/deploy" >> $GITHUB_ENV
+        echo "TEST_PATH"=./src/Tests/Tests.fsproj >> $GITHUB_ENV
+    -
+      name: Read Version
+      id: read_version
+      run: |
+        VER=$(cat ./VERSION | awk -F. -v OFS=. '{$NF += 1 ; print}')
+        echo $VER >> temp && mv temp ./VERSION
+        echo "VERSION=$VER" >> $GITHUB_ENV
+    - 
+      name: Install paket as a global tool and add dotnet tools global path to PATH
+      run: |
+        dotnet tool install -g paket
+        echo "${HOME}/.dotnet/tools" >> $GITHUB_PATH
+    -
+      name: Install nuget packages with paket.
+      run: paket install
+    - 
+      name: Restore local tools
+      run: dotnet tool restore
+    - 
+      name: Build project in release mode
+      run: |
+        dotnet restore ${{ env.PROJECT_PATH }}
+        dotnet build --configuration Release ${{ env.PROJECT_PATH }}
+    - 
+      name: Test project
+      run: |
+        dotnet tool restore
+        dotnet restore ${{ env.TEST_PATH }}
+        dotnet build ${{ env.TEST_PATH }}
+        dotnet nunit ${{ env.TEST_PATH}}/bin/Debug/net7.0/Tests.dll
+    - 
+      name: Pack NuGet package
+      run: paket pack --build-config Release --version ${{ env.VERSION }} ${{ env.OUTPUT_PATH }}
+    - name: Publish Nuget
+      run: dotnet nuget push ${{ env.OUTPUT_PATH }}/*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_PUSH }}

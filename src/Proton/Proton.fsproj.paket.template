@@ -1,0 +1,40 @@
+type project
+id FSharp.Proton
+title FSharp.Proton
+authors Sebastian Fialka
+description
+    Contains Thoth-like encoders and decoders of FSharp types to protobuf. Supports encoding and decoding without using protobuf-net attributes and thereby no direct reference to protobuf-net.
+files
+    ../../README.md ==> docs
+readme /docs/README.md
+include-pdbs true
+projectUrl
+    https://github.com/sebfia/Proton
+repositoryUrl
+    https://github.com/sebfia/Proton
+copyright Sebastian Fialka
+licenseExpression MIT
+licenseUrl https://licenses.nuget.org/MIT
+dependencies
+    framework: net6.0
+        FSharp.Core >= 7.0.0
+        protobuf-net >= 3.2.0
+        protobuf-net.Core >= 3.2.0
+    framework: net7.0
+        FSharp.Core >= 7.0.0
+        protobuf-net >= 3.2.0
+        protobuf-net.Core >= 3.2.0
+    framework: net462
+        FSharp.Core >= 7.0.0
+        protobuf-net >= 3.2.0
+        protobuf-net.Core >= 3.2.0
+    framework: netstandard2.0
+        FSharp.Core >= 7.0.0
+        protobuf-net >= 3.2.0
+        protobuf-net.Core >= 3.2.0
+        System.Reflection.Emit >= 4.7.0
+        System.Reflection.Emit.Lightweight >= 4.7.0
+    framework: netstandard2.1
+        FSharp.Core >= 7.0.0
+        protobuf-net >= 3.2.0
+        protobuf-net.Core >= 3.2.0
