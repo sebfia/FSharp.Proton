@@ -43,6 +43,7 @@ jobs:
         echo "PROJECT_PATH=./src/Proton/Proton.fsproj" >> $GITHUB_ENV
         echo "OUTPUT_PATH=./src/Proton/deploy" >> $GITHUB_ENV
         echo "TEST_PATH"=./src/Tests/Tests.fsproj >> $GITHUB_ENV
+        echo "TEST_DIR=./src/Tests" >> $GITHUB_ENV
     -
       name: Read Version
       id: read_version
@@ -72,7 +73,7 @@ jobs:
         dotnet tool restore
         dotnet restore ${{ env.TEST_PATH }}
         dotnet build ${{ env.TEST_PATH }}
-        dotnet nunit ${{ env.TEST_PATH}}/bin/Debug/net7.0/Tests.dll
+        dotnet nunit ${{ env.TEST_DIR }}/bin/Debug/net7.0/Tests.dll
     - 
       name: Pack NuGet package
       run: paket pack --build-config Release --version ${{ env.VERSION }} ${{ env.OUTPUT_PATH }}
