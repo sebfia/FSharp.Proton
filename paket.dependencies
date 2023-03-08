@@ -1,7 +1,7 @@
 group main
     source https://api.nuget.org/v3/index.json
     storage:none
-    framework:net7
+    framework:netstandard2.0, netstandard2.1, net462, net6, net7
     nuget FSharp.Core
     nuget protobuf-net
 

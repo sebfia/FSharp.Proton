@@ -1,11 +1,12 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net7.0</TargetFramework>
+    <TargetFrameworks>netstandard2.0;netstandard2.1;net462;net6.0;net7.0</TargetFrameworks>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Proton.fs" />
     <None Include="Spiking.fsx" />
+    <None Include="../../README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>
