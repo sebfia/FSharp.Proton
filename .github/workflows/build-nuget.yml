@@ -77,5 +77,18 @@ jobs:
     - 
       name: Pack NuGet package
       run: paket pack --build-config Release --version ${{ env.VERSION }} ${{ env.OUTPUT_PATH }}
-    - name: Publish Nuget
+    - 
+      name: Publish Nuget
       run: dotnet nuget push ${{ env.OUTPUT_PATH }}/*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_PUSH }}
+    - 
+      name: Commit and tag VERSION change
+      uses: EndBug/add-and-commit@v9
+      with:
+        author_name: GitHub Actions
+        author_email: actions@github.com
+        committer_name: GitHub Actions
+        committer_email: actions@github.com
+        message: 'Updated and tagged new version.'
+        add: ./VERSION
+        new_branch: dev
+        tag: mercator-analyzers_v${{ env.VERSION }}
