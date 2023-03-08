@@ -47,3 +47,4 @@ Paket.*.targets
 paket-files/
 .ionide
 src/Tests/TestResult.xml
+TestResult.xml
