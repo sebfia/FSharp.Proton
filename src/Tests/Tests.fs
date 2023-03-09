@@ -201,6 +201,18 @@ module ``Simple Encoders and Decoders`` =
         let buffer = (Encode.option (Encode.int32 1) 1 |> Encode.toBytes) (Some 42)
         (Decode.option (Decode.int32 1) 1 |> Decode.fromBytes) buffer |> should equal (Some 42)
 
+    [<Test>]
+    let ``Encoding and Decoding Of A Simple Ok Result`` () =
+        let expected = (Ok 42) |> Result.mapError (fun (x: string) -> x)
+        let buffer = (Encode.result (Encode.int32 1) (Encode.string 1) 1 |> Encode.toBytes) (Ok 42)
+        (Decode.result (Decode.int32 1) (Decode.string 1) 1 |> Decode.fromBytes) buffer |> should equal expected
+
+    [<Test>]
+    let ``Encoding and Decoding Of A Simple Error Result`` () =
+        let expected = (Error "Error") |> Result.map (fun (x:int) -> x)
+        let buffer = (Encode.result (Encode.int32 1) (Encode.string 1) 1 |> Encode.toBytes) (Error "Error")
+        (Decode.result (Decode.int32 1) (Decode.string 1) 1 |> Decode.fromBytes) buffer |> should equal expected
+
 module ``Back And Forth With More Complex Types`` =
     open System
     open NUnit.Framework
