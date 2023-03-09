@@ -249,6 +249,50 @@ module Proton
                 | Error e -> Error e
             | _ -> Error "Invalid data for Option type!"
 
+        let inline serializeResult<'TSuccess, 'TError> (encodeSuccess: 'TSuccess -> Proto<unit>) (encodeError: 'TError -> Proto<unit>) value : ProtoResult<byte array> =
+
+            use ms = new MemoryStream()
+            use w = ProtoWriter.Create(ms, null, null)
+        
+            ProtoWriter.WriteFieldHeader(1, WireType.Varint, w)
+            match value with
+            | Ok x -> 
+                ProtoWriter.WriteByte(0uy, w)
+                let buf = serializeInFrame encodeSuccess x
+                writeStringHeader 2 w
+                writeBytes buf w
+            | Error y ->
+                ProtoWriter.WriteByte(1uy, w)
+                let buf = serializeInFrame encodeError y
+                ProtoWriter.WriteFieldHeader(2, WireType.String, w)
+                ProtoWriter.WriteBytes(buf, w)
+            
+            w.Close()
+
+            Ok (ms.ToArray())
+
+        let inline deserializeResult<'TSuccess, 'TError> (decodeSuccess: Proto -> ProtoResult<'TSuccess>*Proto) (decodeError: Proto -> ProtoResult<'TError>*Proto) (buffer: byte array) : ProtoResult<Result<'TSuccess,'TError>> =
+            
+            use ms = new MemoryStream(buffer)
+            use r = ProtoReader.Create(ms, null, null)
+
+            if r.TryReadFieldHeader(1) |> not then Error "No field header option discriminator!" else
+            
+            match r.ReadByte() with
+            | 0uy -> 
+                if r.TryReadFieldHeader(2) |> not then Error "No field header for Ok Result found!" else
+                let buf = ProtoReader.AppendBytes(Array.empty, r)
+                match deserializeInFrame decodeSuccess buf with
+                | Ok x -> Ok x |> Result.mapError (fun (x: 'TError) -> x) |> Ok
+                | Error e -> Error e
+            | 1uy ->  
+                if r.TryReadFieldHeader(2) |> not then Error "No field header for Error Result found!" else
+                let buf = ProtoReader.AppendBytes(Array.empty, r)
+                match deserializeInFrame decodeError buf with
+                | Ok x -> Error x |> Result.map (fun (x: 'TSuccess) -> x) |> Ok
+                | Error e -> Error e
+            | _ -> Error "Invalid data for Results type!"
+
         [<RequireQualifiedAccess>]
         type Decode =
             static member inline int16 i = readInt16 i
@@ -302,6 +346,16 @@ module Proton
                     | true ->
                         let bytes = ProtoReader.AppendBytes(Array.empty, r)
                         (deserializeOption decoder bytes),p
+                    | _ -> (Error "Unable to read field header for Option."),p
+            )
+            static member inline result<'TSuccess,'TError> decodeSuccess decodeError i : Proto<Result<'TSuccess,'TError>> = (fun p ->
+                match p with
+                | Writer _ -> failwith "Can not use a writer for reading!"
+                | Reader r -> 
+                    match r.TryReadFieldHeader(i) with
+                    | true ->
+                        let bytes = ProtoReader.AppendBytes(Array.empty, r)
+                        (deserializeResult decodeSuccess decodeError bytes),p
                     | _ -> (Error "Unable to read field header for Option."),p
             )
             static member inline object<'a> decoder i : Proto<'a> = (fun p ->
@@ -430,6 +484,14 @@ module Proton
                     writeBytes buffer w
                     Ok ()
                 | Error e -> Error e
+            )
+            static member inline result<'TSuccess,'TError> encodeSuccess encodeError i (value: Result<'TSuccess, 'TError>) : Proto<unit> = Encode.encodeWithWriter(fun w ->
+                match serializeResult encodeSuccess encodeError value with
+                | Ok buffer ->
+                    writeStringHeader i w
+                    writeBytes buffer w
+                    Ok()
+                | Error e -> Error $"Error trying to encode Result<{typeof<'TSuccess>}, {typeof<'TError>}>.{Environment.NewLine}{e}"
             )
             static member inline object<'a> encoder i (value: 'a) : Proto<unit> = Encode.encodeWithWriter(fun w ->
                 try
