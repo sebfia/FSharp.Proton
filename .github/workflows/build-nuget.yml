@@ -8,6 +8,7 @@ on:
       - src/Proton/*.fsproj
       - src/Proton/*.fs
       - src/Proton/paket.references
+      - src/Proton/Proton.fsproj.paket.template
       - .github/workflows/build-nuget.yml
 
 # permissions are needed if pushing to ghcr.io
