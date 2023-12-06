@@ -21,7 +21,7 @@ jobs:
 
     strategy:
         matrix:
-          dotnet-version: [ '7.0.x' ]
+          dotnet-version: [ '8.0.x' ]
 
     permissions:
       contents: read 
@@ -73,7 +73,7 @@ jobs:
         dotnet tool restore
         dotnet restore ${{ env.TEST_PATH }}
         dotnet build ${{ env.TEST_PATH }}
-        dotnet nunit ${{ env.TEST_DIR }}/bin/Debug/net7.0/Tests.dll
+        dotnet nunit ${{ env.TEST_DIR }}/bin/Debug/net8.0/Tests.dll
     - 
       name: Pack NuGet package
       run: paket pack --build-config Release --version ${{ env.VERSION }} ${{ env.OUTPUT_PATH }}
