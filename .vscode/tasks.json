@@ -53,8 +53,10 @@
             "type": "shell",
             "command": "dotnet",
             "args": [
-                "nunit",
-                "${workspaceFolder}/src/Tests/bin/Debug/net7.0/Tests.dll",
+                "test",
+                "${workspaceFolder}/src/Tests/bin/Debug/net8.0/Tests.dll",
+                "--logger", 
+                "trx;LogFileName=test-results.trx"
                 // "--trace=Verbose"
                 // "/property:GenerateFullPaths=true",
                 // "/consoleloggerparameters:NoSummary"

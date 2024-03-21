@@ -13,4 +13,6 @@ group test
     nuget FsUnit
     nuget Microsoft.NET.Test.Sdk
     nuget NUnit
+    nuget NUnit.Analyzers
     nuget protobuf-net
+    nuget NUnit3TestAdapter
