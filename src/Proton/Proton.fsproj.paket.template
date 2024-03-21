@@ -17,28 +17,28 @@ licenseExpression MIT
 licenseUrl https://licenses.nuget.org/MIT
 dependencies
     framework: net6.0
-        FSharp.Core >= 8.0.100
+        FSharp.Core >= 8.0.200
         protobuf-net >= 3.2.30
-        protobuf-net.Core >= 3.2.26
+        protobuf-net.Core >= 3.2.30
     framework: net7.0
-        FSharp.Core >= 8.0.100
+        FSharp.Core >= 8.0.200
         protobuf-net >= 3.2.30
-        protobuf-net.Core >= 3.2.26
+        protobuf-net.Core >= 3.2.30
     framework: net8.0
-        FSharp.Core >= 8.0.100
+        FSharp.Core >= 8.0.200
         protobuf-net >= 3.2.30
-        protobuf-net.Core >= 3.2.26
+        protobuf-net.Core >= 3.2.30
     framework: net462
-        FSharp.Core >= 8.0.100
+        FSharp.Core >= 8.0.200
         protobuf-net >= 3.2.30
-        protobuf-net.Core >= 3.2.26
+        protobuf-net.Core >= 3.2.30
     framework: netstandard2.0
-        FSharp.Core >= 8.0.100
+        FSharp.Core >= 8.0.200
         protobuf-net >= 3.2.30
-        protobuf-net.Core >= 3.2.26
-        System.Reflection.Emit >= 4.7.0
-        System.Reflection.Emit.Lightweight >= 4.7.0
+        protobuf-net.Core >= 3.2.30
+        System.Reflection.Emit >= 4.7
+        System.Reflection.Emit.Lightweight >= 4.7
     framework: netstandard2.1
-        FSharp.Core >= 8.0.100
+        FSharp.Core >= 8.0.200
         protobuf-net >= 3.2.30
-        protobuf-net.Core >= 3.2.26
+        protobuf-net.Core >= 3.2.30
