@@ -74,7 +74,7 @@ jobs:
         dotnet tool restore
         dotnet restore ${{ env.TEST_PATH }}
         dotnet build ${{ env.TEST_PATH }}
-        dotnet nunit ${{ env.TEST_DIR }}/bin/Debug/net8.0/Tests.dll
+        dotnet test ${{ env.TEST_DIR }}/bin/Debug/net8.0/Tests.dll --logger "trx;LogFileName=test-results.trx"
     - 
       name: Pack NuGet package
       run: paket pack --build-config Release --version ${{ env.VERSION }} ${{ env.OUTPUT_PATH }}
