@@ -1,14 +1,14 @@
 group main
     source https://api.nuget.org/v3/index.json
     storage:none
-    framework:netstandard2.0, netstandard2.1, net462, net6, net8
+    framework: netstandard2.1, net7, net8, net9
     nuget FSharp.Core
     nuget protobuf-net
 
 group test
     source https://api.nuget.org/v3/index.json
     storage:none
-    framework:net8
+    framework:net9
     nuget FSharp.Core
     nuget FsUnit
     nuget Microsoft.NET.Test.Sdk

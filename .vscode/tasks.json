@@ -54,7 +54,7 @@
             "command": "dotnet",
             "args": [
                 "test",
-                "${workspaceFolder}/src/Tests/bin/Debug/net8.0/Tests.dll",
+                "${workspaceFolder}/src/Tests/bin/Debug/net9.0/Tests.dll",
                 "--logger", 
                 "trx;LogFileName=test-results.trx"
                 // "--trace=Verbose"
