@@ -84,7 +84,7 @@ jobs:
         paket pack --build-config Release --version ${{ steps.version.outputs.build_version }} ${{ steps.determine-paths.outputs.output_path }}
     - 
       name: Publish Nuget
-      run: dotnet nuget push ${{ steps.determine-paths.outputs.project_path }}/*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_PUSH }}
+      run: dotnet nuget push ${{ steps.determine-paths.outputs.output_path }}/*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_PUSH }}
     - 
       name: Commit and tag new version and create release
       env: 
@@ -103,4 +103,4 @@ jobs:
             -t 'FSharp.Proton ${{ steps.version.outputs.build_version }}' \
             -n 'FSharp.Proton ${{ steps.version.outputs.build_version }} Release Files' \
             --generate-notes \
-            ${{ steps.determine-paths.outputs.project_path }}/*.*
+            ${{ steps.determine-paths.outputs.output_path }}/*.*
